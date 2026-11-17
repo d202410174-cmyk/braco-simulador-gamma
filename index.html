@@ -1,0 +1,668 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Braço hidráulico · simulador interativo</title>
+<meta name="description" content="Simulador 3D do braço hidráulico com garra de engrenagens, acionado por seringas. Projeto e Desenvolvimento de Produtos, DEP/UFTM.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%A6%BE%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"
+} }
+</script>
+<style>
+  :root {
+    --fundo: #eeeae3;
+    --cartao: #faf8f4;
+    --borda: #ddd6ca;
+    --texto: #1f2328;
+    --suave: #6b6f75;
+    --acento: #e3701b;
+    --acento-texto: #ffffff;
+    --agua: #2f7fe0;
+    --agua-claro: #9cc4f2;
+    --mdf: #c99c63;
+    --foco: #1f6fd1;
+    --mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--fundo);
+    color: var(--texto);
+    font: 15px/1.45 "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  button { font: inherit; }
+  button:focus-visible, input:focus-visible { outline: 3px solid var(--foco); outline-offset: 2px; }
+
+  .app { display: flex; flex-direction: column; min-height: 100vh; }
+  .lateral { padding: 16px 16px 8px; display: flex; flex-direction: column; gap: 12px; }
+  .palco-area { position: relative; height: 62vh; min-height: 340px; overflow: hidden; }
+  #palco { position: absolute; inset: 0; }
+  #palco canvas { display: block; touch-action: none; }
+  .controles { padding: 8px 16px 24px; display: flex; flex-direction: column; gap: 12px; }
+
+  h1 { font-size: 1.6rem; line-height: 1.15; margin: 0; letter-spacing: -0.01em; }
+  .sub { margin: 4px 0 0; color: var(--suave); font-size: 0.9rem; }
+  .link-ra {
+    align-self: flex-start; display: inline-block; margin-top: 8px;
+    border: 1.5px solid var(--acento); color: var(--acento); border-radius: 999px;
+    padding: 4px 14px; text-decoration: none; font-weight: 600; font-size: 0.92rem;
+  }
+  .link-ra:hover { background: var(--acento); color: var(--acento-texto); }
+
+  .aperto .rot { color: var(--suave); font-size: 0.95rem; }
+  .aperto .num { font-family: var(--mono); font-weight: 700; color: var(--acento); font-size: 2.4rem; line-height: 1.05; }
+  .aperto .num small { font-size: 1rem; color: var(--suave); font-weight: 400; margin-left: 4px; }
+  .aperto .det { font-family: var(--mono); color: var(--suave); font-size: 0.82rem; }
+
+  .cartao { background: var(--cartao); border: 1px solid var(--borda); border-radius: 10px; padding: 10px 12px; }
+  .dica b { color: var(--acento); }
+  #status.ok { border-color: #3d9a5b; background: #eef8f1; }
+
+  .chip-peca {
+    position: absolute; left: 12px; bottom: 10px; max-width: calc(100% - 24px);
+    font-family: var(--mono); font-size: 0.78rem; background: var(--cartao);
+    border: 1px solid var(--borda); border-radius: 8px; padding: 6px 10px;
+  }
+  .carregando { position: absolute; inset: 0; display: grid; place-items: center; color: var(--suave); font-family: var(--mono); }
+
+  .grupo-botoes { display: flex; flex-wrap: wrap; gap: 8px; }
+  .grupo-botoes.centro { justify-content: center; }
+  .grupo-botoes button {
+    border: 1px solid var(--borda); background: var(--cartao); color: var(--texto);
+    border-radius: 999px; padding: 7px 15px; min-height: 40px; cursor: pointer;
+  }
+  .grupo-botoes button[aria-pressed="true"] { background: var(--acento); border-color: var(--acento); color: var(--acento-texto); font-weight: 600; }
+
+  /* seringas mestras */
+  .painel-titulo { font-weight: 600; margin: 0 0 4px; }
+  .painel-titulo span { font-weight: 400; color: var(--suave); font-size: 0.85rem; }
+  .seringa { display: grid; grid-template-columns: 74px minmax(0, 1fr); align-items: center; gap: 8px; padding: 6px 0; }
+  .seringa + .seringa { border-top: 1px dashed var(--borda); }
+  .seringa .nome { font-weight: 600; font-size: 0.92rem; }
+  .seringa .valor { display: block; font-family: var(--mono); font-size: 0.75rem; color: var(--suave); font-weight: 400; }
+  .corpo { position: relative; height: 38px; --u: 0; overflow: hidden; }
+  .tubo {
+    position: absolute; left: 14px; right: 46px; top: 9px; height: 20px;
+    border: 2px solid #8fa3b5; border-radius: 3px 6px 6px 3px; background: rgba(255,255,255,0.7); overflow: hidden;
+  }
+  .bico { position: absolute; left: 2px; top: 15px; width: 13px; height: 8px; background: #8fa3b5; border-radius: 2px; }
+  .agua { position: absolute; left: 0; top: 0; bottom: 0; background: linear-gradient(var(--agua-claro), var(--agua)); width: calc((1 - var(--u)) * 88% + 4%); transition: width .05s linear; }
+  .haste {
+    position: absolute; top: 16px; height: 6px; background: #b7c2cc; border-radius: 2px;
+    left: calc(14px + (1 - var(--u)) * (100% - 74px) * 0.88 + (100% - 74px) * 0.04); right: 6px;
+  }
+  .cabo { position: absolute; right: 0; top: 4px; width: 10px; height: 30px; background: #6e7f8f; border-radius: 3px; transform: translateX(calc(var(--u) * -1 * (100% - 74px) * 0.88)); }
+  .corpo-largura { position: absolute; inset: 0; }
+  .corpo input[type=range] {
+    position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: grab;
+    direction: rtl;
+  }
+  .corpo input[type=range]:active { cursor: grabbing; }
+  .corpo:focus-within .tubo { box-shadow: 0 0 0 3px var(--foco); }
+
+  .legenda { font: 600 12px "Inter", sans-serif; color: #fff; background: rgba(31,35,40,0.78); padding: 2px 7px; border-radius: 6px; pointer-events: none; white-space: nowrap; }
+  .legenda.alvo { background: var(--acento); }
+  .rodape { color: var(--suave); font-size: 0.8rem; margin: 4px 0 0; }
+
+  @media (min-width: 900px) {
+    .app { display: grid; grid-template-columns: 380px 1fr; grid-template-rows: auto 1fr; height: 100vh; }
+    .lateral { grid-column: 1; grid-row: 1; }
+    .controles { grid-column: 1; grid-row: 2; overflow: auto; }
+    .palco-area { grid-column: 2; grid-row: 1 / span 2; height: auto; }
+  }
+  @media (prefers-reduced-motion: reduce) { .agua { transition: none; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="lateral">
+    <div>
+      <h1 id="titulo">Braço hidráulico</h1>
+      <p class="sub" id="subtitulo">Simulador · Projeto e Desenvolvimento de Produtos · DEP/UFTM</p>
+      <a class="link-ra" href="ar.html">Ver em realidade aumentada ↗</a>
+    </div>
+    <div class="aperto" aria-live="polite">
+      <div class="rot">Aperto por dedo, mão de <span id="forca-mao">30</span> N ≈</div>
+      <div class="num"><span id="aperto">–</span><small>N</small></div>
+      <div class="det" id="aperto-det">abertura – mm · segura até – g</div>
+    </div>
+    <div class="cartao dica" id="status"><b>Arraste o êmbolo</b> de uma seringa mestra para mover o braço. Desafio: leve a engrenagem do suporte A até o B.</div>
+  </header>
+
+  <main class="palco-area" id="palco-area">
+    <div id="palco" aria-label="Modelo 3D do braço. Arraste para girar a câmera, use dois dedos ou a roda do mouse para aproximar."></div>
+    <div class="carregando" id="carregando">carregando o modelo…</div>
+    <div class="chip-peca" id="chip-peca" hidden></div>
+  </main>
+
+  <section class="controles">
+    <div class="cartao">
+      <p class="painel-titulo">Seringas mestras <span>· empurre ou puxe o êmbolo</span></p>
+      <div id="seringas"></div>
+    </div>
+    <div class="grupo-botoes" role="group" aria-label="Isolar subsistema" id="bt-isolar"></div>
+    <div class="grupo-botoes" role="group" aria-label="Vista">
+      <button type="button" id="bt-raiox" aria-pressed="false">Hidráulica (raio-X)</button>
+      <button type="button" id="bt-legendas" aria-pressed="true">Legendas</button>
+    </div>
+    <div class="grupo-botoes centro" role="group" aria-label="Câmera" id="bt-cameras"></div>
+    <div class="grupo-botoes centro" role="group" aria-label="Ações">
+      <button type="button" id="bt-tour" aria-pressed="false">Tour automático</button>
+      <button type="button" id="bt-levar" aria-pressed="false">Pegar e levar a peça</button>
+      <button type="button" id="bt-reiniciar" aria-pressed="false">Reiniciar peça</button>
+    </div>
+    <p class="rodape" id="rodape">Os valores com ≈ são estimativas: sem atrito nas seringas, seringas mestra e escrava iguais (1:1).</p>
+  </section>
+</div>
+
+<script type="module">
+import * as THREE from "three";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
+import { CSS2DRenderer, CSS2DObject } from "three/addons/renderers/CSS2DRenderer.js";
+
+// ================= DADOS DO GRUPO (edite aqui) =================
+const CONFIG = {
+  titulo: "Braço hidráulico com garra de engrenagens",
+  grupo: "",                 // ex.: "Grupo 3"
+  integrantes: "Ana Clara de Almeida Lourenço, Ana Julia Pavani Geraldo, Maria Luisa Faria Leme e Mariana Almeida Alexandre",
+  forcaMao_N: 30,            // força da mão no êmbolo da seringa mestra
+  atrito: 0.3,               // coeficiente de atrito estimado entre a garra e a peça
+  densidadeAco_g_cm3: 7.85,
+};
+
+// Peças animadas de cada subsistema (nomes do .blend)
+const SUBS = {
+  giro:     { nome: "Giro",     anim: ["Base_Giratoria", "Suporte_Seringa_Plataforma", "Seringa_Plataforma", "Embolo_Plataforma"], motor: "Base_Giratoria" },
+  ombro:    { nome: "Ombro",    anim: ["Ombro", "Seringa_Coluna", "Embolo_Coluna", "Suporte_Seringa_Coluna"], motor: "Ombro" },
+  cotovelo: { nome: "Cotovelo", anim: ["Cotovelo", "Embolo_Cotovelo"], motor: "Cotovelo" },
+  garra:    { nome: "Garra",    anim: ["Engrenagem_Direita", "Engrenagem_Esquerda", "Dedo_Direito", "Dedo_Esquerdo", "Haste_Travamento_Dir", "Haste_Travamento_Esq", "Biela_Seringa", "Embolo_Seringa"], motor: null },
+};
+const ORDEM = ["giro", "ombro", "cotovelo", "garra"];
+// a qual subsistema cada peça pertence (para isolar): primeiro ancestral que aparece aqui
+const DONO = {
+  Garra_Raiz: "garra", Seringa_Braco_Superior: "garra",
+  Cotovelo: "cotovelo", Seringa_Cotovelo: "cotovelo", Embolo_Cotovelo: "cotovelo",
+  Ombro: "ombro", Coluna_Direita: "ombro", Coluna_Esquerda: "ombro", Conector_Colunas: "ombro",
+  Suporte_Seringa_Coluna: "ombro", Seringa_Coluna: "ombro", Embolo_Coluna: "ombro",
+};
+const DONO_PREFIXO = [["Suporte_Seringa_Inferior", "cotovelo"], ["Paraf_Pivo_Seringa_Coluna", "ombro"]];
+const MATERIAIS_MDF = ["Orig_MDF", "Base_MDF_Escuro"];
+
+const reduzir = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const $ = (id) => document.getElementById(id);
+const fmt = (v, d = 0) => v.toLocaleString("pt-BR", { minimumFractionDigits: d, maximumFractionDigits: d });
+const lerp = (a, b, t) => a + (b - a) * t;
+const suave = (t) => t * t * (3 - 2 * t);
+const clamp01 = (v) => Math.min(1, Math.max(0, v));
+
+$("titulo").textContent = CONFIG.titulo;
+if (CONFIG.grupo) $("subtitulo").textContent = `Simulador · ${CONFIG.grupo} · Projeto e Desenvolvimento de Produtos · DEP/UFTM`;
+if (CONFIG.integrantes) $("rodape").textContent += ` Integrantes: ${CONFIG.integrantes}.`;
+$("forca-mao").textContent = CONFIG.forcaMao_N;
+
+// ================= CENA =================
+const area = $("palco");
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+area.appendChild(renderer.domElement);
+const rotulos = new CSS2DRenderer();
+rotulos.domElement.style.position = "absolute";
+rotulos.domElement.style.inset = "0";
+rotulos.domElement.style.pointerEvents = "none";
+area.appendChild(rotulos.domElement);
+
+const scene = new THREE.Scene();
+scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
+const camera = new THREE.PerspectiveCamera(35, 1, 0.005, 20);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.minDistance = 0.08;
+controls.maxDistance = 2.5;
+controls.maxPolarAngle = Math.PI * 0.495;
+
+const sol = new THREE.DirectionalLight(0xffffff, 1.6);
+sol.position.set(0.5, 1.0, 0.6);
+sol.castShadow = true;
+sol.shadow.mapSize.set(2048, 2048);
+Object.assign(sol.shadow.camera, { left: -0.4, right: 0.4, top: 0.4, bottom: -0.4, near: 0.1, far: 3 });
+sol.shadow.bias = -0.0004;
+scene.add(sol, new THREE.HemisphereLight(0xffffff, 0xd8cfc0, 0.6));
+const chao = new THREE.Mesh(new THREE.CircleGeometry(1.5, 64), new THREE.ShadowMaterial({ opacity: 0.18 }));
+chao.rotation.x = -Math.PI / 2;
+chao.receiveShadow = true;
+scene.add(chao);
+
+function redimensionar() {
+  const w = area.clientWidth, h = area.clientHeight;
+  renderer.setSize(w, h);
+  rotulos.setSize(w, h);
+  camera.aspect = w / Math.max(h, 1);
+  camera.updateProjectionMatrix();
+}
+new ResizeObserver(redimensionar).observe(area);
+
+// ================= ESTADO =================
+const estado = { u: { giro: 0.5, ombro: 0.5, cotovelo: 0.5, garra: 1 }, alvo: null, tour: false, auto: null };
+let modelo, raizGarra, sub = {}, garraTab, peca, pedestais = [], marcadores = [], legendas = [], mesasPorSub = {};
+let tempoClip = 0, duracaoClip = 1;
+
+const loader = new GLTFLoader();
+loader.load("BracoRA.glb", (gltf) => {
+  modelo = gltf.scene;
+  scene.add(modelo);
+  const clip = gltf.animations[0];
+  duracaoClip = clip.duration;
+  preparar(clip);
+  $("carregando").remove();
+  window.simulador = { scene, camera, controls, modelo, estado, sub, garraTab, peca, pedestais };
+  requestAnimationFrame(loop);
+}, undefined, (e) => { $("carregando").textContent = "Não foi possível carregar BracoRA.glb"; console.error(e); });
+
+// ================= PREPARAÇÃO =================
+function preparar(clip) {
+  // materiais individuais (para isolar e raio-X)
+  modelo.traverse((o) => {
+    if (!o.isMesh) return;
+    o.castShadow = o.receiveShadow = true;
+    o.material = o.material.clone();
+    o.userData.op0 = o.material.opacity;
+    o.userData.tr0 = o.material.transparent;
+    o.userData.mdf = MATERIAIS_MDF.includes(o.material.name);
+    o.userData.sub = donoDe(o);
+    (mesasPorSub[o.userData.sub] ||= []).push(o);
+  });
+
+  // trilhas da animação, por objeto
+  const trilhas = {};
+  for (const tr of clip.tracks) {
+    const i = tr.name.lastIndexOf(".");
+    const no = tr.name.slice(0, i), prop = tr.name.slice(i + 1);
+    (trilhas[no] ||= []).push({ prop, interp: tr.createInterpolant() });
+  }
+  const usados = new Set();
+  for (const k of ORDEM) {
+    const s = SUBS[k];
+    s.nos = s.anim.map((n) => ({ obj: modelo.getObjectByName(n), tr: trilhas[n] || [] })).filter((x) => x.obj);
+    s.anim.forEach((n) => usados.add(n));
+    sub[k] = s;
+  }
+  // peças animadas por restrições no Blender (ex.: seringa que aponta para o êmbolo): vão para o subsistema dono
+  for (const n of Object.keys(trilhas).filter((n) => !usados.has(n))) {
+    const obj = modelo.getObjectByName(n);
+    if (obj) sub[donoDe(obj)].nos.push({ obj, tr: trilhas[n] });
+  }
+
+  raizGarra = modelo.getObjectByName("Garra_Raiz");
+
+  // curso de cada subsistema: entre os dois extremos da animação original
+  const N = 240, tempos = Array.from({ length: N + 1 }, (_, i) => (i / N) * duracaoClip);
+  for (const k of ["giro", "ombro", "cotovelo"]) {
+    const s = sub[k], q = s.nos.find((x) => x.obj.name === s.motor).tr.find((t) => t.prop === "quaternion");
+    const qs = tempos.map((t) => new THREE.Quaternion().fromArray(q.interp.evaluate(t)));
+    const rel = qs.map((qq) => qs[0].clone().invert().multiply(qq));
+    let eixo = new THREE.Vector3(1, 0, 0), maior = -1;
+    rel.forEach((r) => { const v = new THREE.Vector3(r.x, r.y, r.z); if (v.length() > maior) { maior = v.length(); eixo = v.clone().normalize(); } });
+    const ang = rel.map((r) => 2 * Math.atan2(new THREE.Vector3(r.x, r.y, r.z).dot(eixo), r.w));
+    let iMin = 0, iMax = 0;
+    ang.forEach((a, i) => { if (a < ang[iMin]) iMin = i; if (a > ang[iMax]) iMax = i; });
+    Object.assign(s, { tA: tempos[iMin], tB: tempos[iMax], angA: ang[iMin], angB: ang[iMax], amplitude: ang[iMax] - ang[iMin] });
+  }
+  // garra: tabela abertura x tempo, medida nos pegadores
+  const pads = { dir: [], esq: [] };
+  raizGarra.traverse((o) => { if (o.isMesh && /Pegador_MDF_Dir/.test(o.name)) pads.dir.push(o); if (o.isMesh && /Pegador_MDF_Esq/.test(o.name)) pads.esq.push(o); });
+  const embolo = sub.garra.nos.find((x) => x.obj.name === "Embolo_Seringa");
+  const tab = tempos.map((t) => {
+    aplicar("garra", t);
+    raizGarra.updateMatrixWorld(true);
+    const m = medirGarra(pads);
+    const p = embolo ? new THREE.Vector3().fromArray(embolo.tr.find((x) => x.prop === "position").interp.evaluate(t)) : new THREE.Vector3();
+    return { t, ...m, embolo: p };
+  });
+  let iF = 0, iA = 0;
+  tab.forEach((r, i) => { if (r.gap < tab[iF].gap) iF = i; if (r.gap > tab[iA].gap) iA = i; });
+  sub.garra.tA = tab[iF].t; sub.garra.tB = tab[iA].t;
+  // tabela final ordenada por u (0 = fechada, 1 = aberta)
+  const M = 120;
+  garraTab = Array.from({ length: M + 1 }, (_, i) => {
+    const u = i / M, t = lerp(sub.garra.tA, sub.garra.tB, u);
+    aplicar("garra", t); raizGarra.updateMatrixWorld(true);
+    const m = medirGarra(pads);
+    const p = embolo ? new THREE.Vector3().fromArray(embolo.tr.find((x) => x.prop === "position").interp.evaluate(t)) : new THREE.Vector3();
+    return { u, t, gap: m.gap, centro: m.centro, embolo: p };
+  });
+  sub.garra.pads = pads;
+
+  // orientar os cursos: ombro e cotovelo com u = 1 levantando a garra
+  estado.u = { giro: uDoTempo("giro", 0), ombro: uDoTempo("ombro", 0), cotovelo: uDoTempo("cotovelo", 0), garra: uDoTempo("garra", 0) };
+  for (const k of ["ombro", "cotovelo"]) {
+    const alturas = [0.1, 0.9].map((u) => { const v = { ...estado.u, [k]: u }; posar(v); return centroGarraMundo().y; });
+    if (alturas[0] > alturas[1]) { const s = sub[k]; [s.tA, s.tB] = [s.tB, s.tA]; [s.angA, s.angB] = [s.angB, s.angA]; estado.u[k] = 1 - estado.u[k]; }
+  }
+  estado.casa = { ...estado.u };
+
+  posar(estado.u);
+  construirPeca();
+  construirInterface();
+  enquadrar("heroi", true);
+  if (!reduzir) alternarTour(true);
+}
+
+function donoDe(o) {
+  for (let x = o; x && x !== modelo; x = x.parent) {
+    if (DONO[x.name]) return DONO[x.name];
+    for (const [p, d] of DONO_PREFIXO) if (x.name.startsWith(p)) return d;
+  }
+  return "giro";
+}
+
+function aplicar(k, t) {
+  for (const { obj, tr } of sub[k].nos) for (const { prop, interp } of tr) {
+    const v = interp.evaluate(t);
+    if (prop === "quaternion") obj.quaternion.fromArray(v);
+    else if (prop === "position") obj.position.fromArray(v);
+    else if (prop === "scale") obj.scale.fromArray(v);
+  }
+}
+function tempoDe(k, u) { return lerp(sub[k].tA, sub[k].tB, clamp01(u)); }
+function uDoTempo(k, t) { const s = sub[k]; return s.tB === s.tA ? 0 : clamp01((t - s.tA) / (s.tB - s.tA)); }
+function posar(u) { for (const k of ORDEM) aplicar(k, tempoDe(k, u[k])); modelo.updateMatrixWorld(true); }
+
+const _inv = new THREE.Matrix4(), _m = new THREE.Matrix4(), _v = new THREE.Vector3();
+function medirGarra(pads) {
+  _inv.copy(raizGarra.matrixWorld).invert();
+  const caixa = (lista) => {
+    const b = new THREE.Box3();
+    for (const o of lista) {
+      _m.multiplyMatrices(_inv, o.matrixWorld);
+      const pos = o.geometry.attributes.position;
+      for (let i = 0; i < pos.count; i++) b.expandByPoint(_v.fromBufferAttribute(pos, i).applyMatrix4(_m));
+    }
+    return b;
+  };
+  const d = caixa(pads.dir), e = caixa(pads.esq);
+  const gap = d.min.x > e.max.x ? d.min.x - e.max.x : e.min.x - d.max.x; // mm, no sistema da garra
+  const centro = new THREE.Vector3((d.min.x + e.max.x + d.max.x + e.min.x) / 4, (d.min.y + d.max.y + e.min.y + e.max.y) / 4, (d.min.z + d.max.z + e.min.z + e.max.z) / 4);
+  return { gap, centro };
+}
+function linhaGarra(u) {
+  const x = clamp01(u) * (garraTab.length - 1), i = Math.min(Math.floor(x), garraTab.length - 2), f = x - i;
+  const a = garraTab[i], b = garraTab[i + 1];
+  return { gap: lerp(a.gap, b.gap, f), centro: a.centro.clone().lerp(b.centro, f), i };
+}
+function centroGarraMundo(u = estado.u.garra) { return raizGarra.localToWorld(linhaGarra(u).centro.clone()); }
+function uParaAbertura(gap) { for (let i = 0; i < garraTab.length; i++) if (garraTab[i].gap >= gap) return garraTab[i].u; return 1; }
+
+// ================= PEÇA E SUPORTES =================
+function construirPeca() {
+  const gapMax = garraTab[garraTab.length - 1].gap;
+  const D = Math.max(12, Math.min(40, Math.round(gapMax * 0.7)));   // mm
+  const H = Math.max(6, Math.round(D * 0.3));
+  // engrenagem de aço
+  const forma = new THREE.Shape(), dentes = Math.max(10, Math.round(D / 3.2)), R = D / 2, r = R - Math.max(1.5, D * 0.07);
+  for (let i = 0; i <= dentes * 4; i++) {
+    const a = (i / (dentes * 4)) * Math.PI * 2, raio = (i % 4 === 1 || i % 4 === 2) ? R : r;
+    i === 0 ? forma.moveTo(raio * Math.cos(a), raio * Math.sin(a)) : forma.lineTo(raio * Math.cos(a), raio * Math.sin(a));
+  }
+  const furo = new THREE.Path(); furo.absarc(0, 0, D * 0.16, 0, Math.PI * 2, true); forma.holes.push(furo);
+  const geo = new THREE.ExtrudeGeometry(forma, { depth: H, bevelEnabled: false, curveSegments: 16 });
+  geo.translate(0, 0, -H / 2); geo.rotateX(-Math.PI / 2); geo.scale(0.001, 0.001, 0.001);
+  peca = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: 0x5b6169, metalness: 0.85, roughness: 0.35 }));
+  peca.castShadow = peca.receiveShadow = true;
+  scene.add(peca);
+  const area_mm2 = Math.PI * ((R + r) / 2) ** 2 - Math.PI * (D * 0.16) ** 2;
+  const massa = area_mm2 * H / 1000 * CONFIG.densidadeAco_g_cm3;
+  Object.assign(peca.userData, { D, H, massa, presa: false, vy: 0 });
+
+  // pose de pegar: varre ombro x cotovelo com a garra aberta; entre as poses baixas que não tocam a mesa,
+  // escolhe a de maior alcance (peça longe da base)
+  const uGiro = [0.2, 0.8];
+  const eixoBase = modelo.getObjectByName("Base_Giratoria").getWorldPosition(new THREE.Vector3());
+  const cands = [];
+  for (let a = 0; a <= 16; a++) for (let b = 0; b <= 16; b++) {
+    const u = { giro: uGiro[0], ombro: a / 16, cotovelo: b / 16, garra: 1 };
+    posar(u);
+    const minPad = Math.min(...sub.garra.pads.dir.concat(sub.garra.pads.esq).map((o) => new THREE.Box3().setFromObject(o).min.y));
+    if (minPad < 0.003) continue;
+    const c = centroGarraMundo(1);
+    cands.push({ u, y: c.y, r: Math.hypot(c.x - eixoBase.x, c.z - eixoBase.z) });
+  }
+  const yMin = Math.min(...cands.map((c) => c.y));
+  const baixas = cands.filter((c) => c.y < yMin + 0.04).sort((p, q) => q.r - p.r);
+  const pegar = baixas.length ? baixas[0].u : { ...estado.casa, garra: 1 };
+  estado.poses = { pegar };
+  // levantar: aumenta o ombro
+  estado.poses.levantar = { ...pegar, ombro: clamp01(pegar.ombro + 0.3), cotovelo: clamp01(pegar.cotovelo + 0.15) };
+  const locais = uGiro.map((g) => { posar({ ...pegar, giro: g }); return centroGarraMundo(1); });
+  estado.locais = locais;
+  ["A", "B"].forEach((nome, i) => {
+    const c = locais[i], topo = c.y - (H / 2) * 0.001;
+    if (topo > 0.002) {
+      const alt = topo, ped = new THREE.Mesh(new THREE.CylinderGeometry(D * 0.32 * 0.001, D * 0.4 * 0.001, alt, 32), new THREE.MeshStandardMaterial({ color: 0xc99c63, roughness: 0.8 }));
+      ped.position.set(c.x, alt / 2, c.z); ped.castShadow = ped.receiveShadow = true; scene.add(ped);
+      pedestais.push({ nome, topo, x: c.x, z: c.z, raio: D * 0.4 * 0.001 });
+    } else pedestais.push({ nome, topo: 0, x: c.x, z: c.z, raio: D * 0.6 * 0.001 });
+    const anel = new THREE.Mesh(new THREE.RingGeometry(D * 0.55 * 0.001, D * 0.7 * 0.001, 48), new THREE.MeshBasicMaterial({ color: i ? 0x2f7fe0 : 0xe3701b, side: THREE.DoubleSide }));
+    anel.rotation.x = -Math.PI / 2; anel.position.set(c.x, 0.0006, c.z); scene.add(anel);
+    const el = document.createElement("div"); el.className = "legenda alvo"; el.textContent = nome;
+    const rot = new CSS2DObject(el); rot.position.set(c.x, Math.max(topo, 0) + 0.006 + H * 0.001, c.z); scene.add(rot); marcadores.push(rot);
+  });
+  reiniciarPeca();
+  $("chip-peca").hidden = false;
+  $("chip-peca").textContent = `Engrenagem de aço Ø${D} × ${H} mm · ${fmt(massa)} g · ${pedestais[0].topo > 0 ? "sobre o suporte A" : "sobre a mesa, em A"}`;
+  posar(estado.u);
+}
+function reiniciarPeca() {
+  if (!peca) return;
+  if (peca.userData.presa) { scene.attach(peca); peca.userData.presa = false; }
+  const p = pedestais[0];
+  peca.position.set(p.x, p.topo + peca.userData.H * 0.0005, p.z);
+  peca.quaternion.identity();
+  peca.userData.vy = 0; peca.userData.caindo = false;
+  avisar(null);
+}
+
+// ================= INTERFACE =================
+function construirInterface() {
+  const cont = $("seringas");
+  for (const k of ORDEM) {
+    const linha = document.createElement("div");
+    linha.className = "seringa";
+    linha.innerHTML = `<label class="nome" for="s-${k}">${sub[k].nome}<span class="valor" id="v-${k}"></span></label>
+      <div class="corpo" id="c-${k}"><div class="bico"></div><div class="tubo"><div class="agua"></div></div><div class="haste"></div><div class="cabo"></div>
+      <input type="range" id="s-${k}" min="0" max="1000" step="1" aria-describedby="v-${k}"></div>`;
+    cont.appendChild(linha);
+    const inp = linha.querySelector("input");
+    inp.value = Math.round(estado.u[k] * 1000);
+    inp.addEventListener("input", () => { pararAutomatico(); estado.u[k] = inp.value / 1000; });
+  }
+  const isolar = $("bt-isolar");
+  [["tudo", "Tudo"], ...ORDEM.map((k) => [k, sub[k].nome])].forEach(([k, txt]) => {
+    const b = document.createElement("button"); b.type = "button"; b.textContent = txt; b.dataset.k = k;
+    b.setAttribute("aria-pressed", k === "tudo"); b.addEventListener("click", () => isolarSub(k)); isolar.appendChild(b);
+  });
+  const cams = $("bt-cameras");
+  [["heroi", "Herói"], ["lado", "Lado"], ["frente", "Frente"], ["topo", "Topo"], ["garra", "Garra"]].forEach(([k, txt]) => {
+    const b = document.createElement("button"); b.type = "button"; b.textContent = txt; b.setAttribute("aria-pressed", "false");
+    b.addEventListener("click", () => { enquadrar(k); cams.querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", x === b)); });
+    cams.appendChild(b);
+  });
+  $("bt-raiox").addEventListener("click", (e) => { const on = e.currentTarget.getAttribute("aria-pressed") !== "true"; e.currentTarget.setAttribute("aria-pressed", on); estado.raiox = on; atualizarMateriais(); });
+  $("bt-legendas").addEventListener("click", (e) => { const on = e.currentTarget.getAttribute("aria-pressed") !== "true"; e.currentTarget.setAttribute("aria-pressed", on); legendas.concat(marcadores).forEach((l) => (l.visible = on)); });
+  $("bt-tour").addEventListener("click", () => alternarTour(!estado.tour));
+  $("bt-levar").addEventListener("click", iniciarLevar);
+  $("bt-reiniciar").addEventListener("click", () => { pararAutomatico(); reiniciarPeca(); });
+
+  // legendas das articulações
+  for (const [nome, txt] of [["Base_Giratoria", "Giro"], ["Ombro", "Ombro"], ["Cotovelo", "Cotovelo"], ["Garra_Raiz", "Garra"]]) {
+    const o = modelo.getObjectByName(nome); if (!o) continue;
+    const el = document.createElement("div"); el.className = "legenda"; el.textContent = txt;
+    const l = new CSS2DObject(el); o.add(l); legendas.push(l);
+  }
+}
+function isolarSub(k) {
+  estado.isolado = k === "tudo" ? null : k;
+  $("bt-isolar").querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.k === k));
+  atualizarMateriais();
+}
+function atualizarMateriais() {
+  modelo.traverse((o) => {
+    if (!o.isMesh) return;
+    let op = o.userData.op0;
+    if (estado.isolado && o.userData.sub !== estado.isolado) op = Math.min(op, 0.1);
+    if (estado.raiox && o.userData.mdf) op = Math.min(op, 0.13);
+    const apagado = op < o.userData.op0;
+    o.material.transparent = o.userData.tr0 || apagado; o.material.opacity = op; o.material.depthWrite = !o.material.transparent;
+    o.castShadow = !apagado;
+  });
+}
+
+const cam = { de: null };
+function enquadrar(tipo, imediato = false) {
+  posar(estado.u);
+  const caixa = new THREE.Box3().setFromObject(modelo), c = caixa.getCenter(new THREE.Vector3()), s = caixa.getSize(new THREE.Vector3()).length();
+  let pos, alvo = c.clone();
+  if (tipo === "heroi") pos = c.clone().add(new THREE.Vector3(-1.0, 0.5, 1.1).multiplyScalar(s));
+  if (tipo === "lado") pos = c.clone().add(new THREE.Vector3(-1.5, 0.15, 0).multiplyScalar(s));
+  if (tipo === "frente") pos = c.clone().add(new THREE.Vector3(0, 0.2, 1.5).multiplyScalar(s));
+  if (tipo === "topo") pos = c.clone().add(new THREE.Vector3(0, 1.7, 0.02).multiplyScalar(s));
+  if (tipo === "garra") { alvo = centroGarraMundo(); pos = alvo.clone().add(new THREE.Vector3(-0.35, 0.25, 0.45).multiplyScalar(s * 0.45)); }
+  if (imediato || reduzir) { camera.position.copy(pos); controls.target.copy(alvo); controls.update(); return; }
+  cam.de = { p: camera.position.clone(), a: controls.target.clone(), p2: pos, a2: alvo, t: 0 };
+}
+
+// ================= AUTOMÁTICO =================
+function alternarTour(on) {
+  estado.tour = on; estado.auto = null;
+  $("bt-tour").setAttribute("aria-pressed", on);
+  $("bt-levar").setAttribute("aria-pressed", "false");
+  if (on) tempoClip = 0;
+}
+function pararAutomatico() { if (estado.tour || estado.auto) alternarTour(false); }
+function iniciarLevar() {
+  alternarTour(false);
+  reiniciarPeca();
+  const P = estado.poses, gA = 0.2, gB = 0.8, fechar = 0;
+  const etapas = [
+    { ...P.levantar, giro: gA, garra: 1 },
+    { ...P.pegar, giro: gA, garra: 1 },
+    { ...P.pegar, giro: gA, garra: fechar },
+    { ...P.levantar, giro: gA, garra: fechar },
+    { ...P.levantar, giro: gB, garra: fechar },
+    { ...P.pegar, giro: gB, garra: fechar },
+    { ...P.pegar, giro: gB, garra: 1 },
+    { ...P.levantar, giro: gB, garra: 1 },
+    { ...estado.casa },
+  ];
+  estado.auto = { etapas, i: 0, t: 0, de: { ...estado.u } };
+  $("bt-levar").setAttribute("aria-pressed", "true");
+}
+
+// ================= LAÇO =================
+const relogio = new THREE.Clock();
+let ultimoHud = 0;
+function loop() {
+  requestAnimationFrame(loop);
+  const dt = Math.min(relogio.getDelta(), 0.05);
+
+  if (estado.tour) {
+    tempoClip = (tempoClip + dt) % duracaoClip;
+    for (const k of ORDEM) estado.u[k] = uDoTempo(k, tempoClip);
+  } else if (estado.auto) {
+    const A = estado.auto, alvo = A.etapas[A.i];
+    A.t += dt / 1.1;
+    const f = suave(Math.min(A.t, 1));
+    for (const k of ORDEM) estado.u[k] = lerp(A.de[k], alvo[k], f);
+    if (A.t >= 1.25) { A.i++; A.t = 0; A.de = { ...estado.u }; if (A.i >= A.etapas.length) { estado.auto = null; $("bt-levar").setAttribute("aria-pressed", "false"); } }
+  }
+
+  // a garra não fecha além da peça
+  const pecaNaGarra = peca && (peca.userData.presa || centroGarraMundo(estado.u.garra).distanceTo(peca.position) < peca.userData.D * 0.0006);
+  if (pecaNaGarra) estado.u.garra = Math.max(estado.u.garra, uParaAbertura(peca.userData.D));
+
+  posar(estado.u);
+  atualizarPeca(dt);
+  sincronizarSeringas();
+
+  if (cam.de) {
+    cam.de.t = Math.min(cam.de.t + dt / 0.8, 1);
+    const f = suave(cam.de.t);
+    camera.position.lerpVectors(cam.de.p, cam.de.p2, f);
+    controls.target.lerpVectors(cam.de.a, cam.de.a2, f);
+    if (cam.de.t >= 1) cam.de = null;
+  }
+  controls.update();
+  renderer.render(scene, camera);
+  rotulos.render(scene, camera);
+
+  const agora = performance.now();
+  if (agora - ultimoHud > 120) { ultimoHud = agora; atualizarHud(); }
+}
+
+function atualizarPeca(dt) {
+  if (!peca) return;
+  const d = peca.userData, gap = linhaGarra(estado.u.garra).gap;
+  if (!d.presa) {
+    const perto = centroGarraMundo().distanceTo(peca.position) < d.D * 0.0006;
+    if (perto && gap <= d.D + 1.5 && !d.caindo) { raizGarra.attach(peca); d.presa = true; avisar("Peça presa. Agora leve até o suporte B."); }
+  } else if (gap > d.D + 3) {
+    scene.attach(peca); d.presa = false; d.caindo = true; d.vy = 0;
+  }
+  if (d.caindo) {
+    const apoio = pedestais.find((p) => Math.hypot(peca.position.x - p.x, peca.position.z - p.z) < p.raio * 1.2);
+    const piso = (apoio ? apoio.topo : 0) + d.H * 0.0005;
+    d.vy -= 9.81 * dt; peca.position.y += d.vy * dt;
+    if (peca.position.y <= piso) {
+      peca.position.y = piso; d.caindo = false; d.vy = 0;
+      peca.quaternion.identity();
+      if (apoio && apoio.nome === "B") avisar("Conseguiu! A engrenagem chegou ao suporte B.", true);
+      else if (apoio && apoio.nome === "A") avisar(null);
+      else avisar("A peça caiu fora dos suportes. Pegue de novo ou toque em Reiniciar peça.");
+    }
+  }
+}
+function avisar(txt, ok = false) {
+  const el = $("status");
+  el.classList.toggle("ok", ok);
+  el.innerHTML = txt ? txt : "<b>Arraste o êmbolo</b> de uma seringa mestra para mover o braço. Desafio: leve a engrenagem do suporte A até o B.";
+}
+
+function sincronizarSeringas() {
+  for (const k of ORDEM) {
+    const c = document.getElementById("c-" + k); if (!c) continue;
+    c.style.setProperty("--u", estado.u[k].toFixed(4));
+    const inp = document.getElementById("s-" + k);
+    if (document.activeElement !== inp || estado.tour || estado.auto) inp.value = Math.round(estado.u[k] * 1000);
+  }
+}
+function atualizarHud() {
+  for (const k of ["giro", "ombro", "cotovelo"]) {
+    const s = sub[k], graus = Math.abs(s.amplitude) * estado.u[k] * 180 / Math.PI, tot = Math.abs(s.amplitude) * 180 / Math.PI;
+    document.getElementById("v-" + k).textContent = `${fmt(graus)}° de ${fmt(tot)}°`;
+    document.getElementById("s-" + k).setAttribute("aria-valuetext", `${sub[k].nome}: ${fmt(graus)} graus de ${fmt(tot)}`);
+  }
+  const g = linhaGarra(estado.u.garra);
+  document.getElementById("v-garra").textContent = `abertura ${fmt(Math.max(g.gap, 0))} mm`;
+  document.getElementById("s-garra").setAttribute("aria-valuetext", `abertura da garra ${fmt(Math.max(g.gap, 0))} milímetros`);
+  // aperto por trabalho virtual: F_dedo = F_mão · dx_êmbolo / d(abertura)
+  const i = Math.min(Math.max(g.i, 1), garraTab.length - 2), a = garraTab[i - 1], b = garraTab[i + 1];
+  const dx = a.embolo.distanceTo(b.embolo), dgap = Math.abs(b.gap - a.gap);
+  const F = dgap > 1e-6 ? CONFIG.forcaMao_N * dx / dgap : 0;
+  const segura = 2 * CONFIG.atrito * F / 9.81 * 1000;
+  $("aperto").textContent = fmt(F, 1);
+  $("aperto-det").textContent = `abertura ${fmt(Math.max(g.gap, 0))} mm · segura até ${fmt(segura)} g`;
+}
+</script>
+</body>
+</html>
